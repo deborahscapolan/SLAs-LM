@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>SLA Last Mile — Simulador</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#0f172a;font-family:system-ui,sans-serif;color:#f1f5f9}
+  select{background:#1e293b;color:#f1f5f9;border:1px solid #334155;border-radius:6px;padding:6px 10px;font-size:13px;outline:none;width:100%}
+  input[type=range]{accent-color:#38bdf8;width:100%}
+  table{width:100%;border-collapse:collapse}
+  th{color:#94a3b8;font-size:11px;font-weight:600;text-align:left;padding:6px 10px;border-bottom:1px solid #334155}
+  td{font-size:12px;padding:7px 10px;border-bottom:1px solid #334155}
+  tr:nth-child(even){background:#ffffff08}
+  ::-webkit-scrollbar{width:6px;height:6px}
+  ::-webkit-scrollbar-track{background:#1e293b}
+  ::-webkit-scrollbar-thumb{background:#334155;border-radius:3px}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const {useState,useMemo} = React;
+
+const C = {bg:"#0f172a",card:"#1e293b",border:"#334155",accent:"#38bdf8",green:"#4ade80",yellow:"#fbbf24",red:"#f87171",muted:"#94a3b8",white:"#f1f5f9",purple:"#a78bfa"};
+
+const RAW_DESCONTO = [
+  {SITE:"MLB",COMPANY:"Transportadora Alpha",FACILITY:"SSP5",PERIODO:"202601Q1",DESCONTO:1200},
+  {SITE:"MLB",COMPANY:"Transportadora Alpha",FACILITY:"SSP5",PERIODO:"202601Q2",DESCONTO:980},
+  {SITE:"MLB",COMPANY:"Transportadora Beta", FACILITY:"GRU1",PERIODO:"202601Q1",DESCONTO:430},
+  {SITE:"MLB",COMPANY:"Transportadora Beta", FACILITY:"GRU1",PERIODO:"202601Q2",DESCONTO:510},
+  {SITE:"MLB",COMPANY:"Transportadora Beta", FACILITY:"GRU1",PERIODO:"202602Q1",DESCONTO:670},
+  {SITE:"MLB",COMPANY:"Transportadora Gama", FACILITY:"REC1",PERIODO:"202602Q1",DESCONTO:340},
+  {SITE:"MLB",COMPANY:"Transportadora Gama", FACILITY:"REC1",PERIODO:"202602Q2",DESCONTO:290},
+  {SITE:"MLA",COMPANY:"Transportadora Delta",FACILITY:"BUE1",PERIODO:"202601Q1",DESCONTO:820},
+  {SITE:"MLA",COMPANY:"Transportadora Delta",FACILITY:"BUE1",PERIODO:"202602Q1",DESCONTO:760},
+  {SITE:"MLM",COMPANY:"Transportadora Épsilon",FACILITY:"MEX1",PERIODO:"202601Q2",DESCONTO:550},
+];
+const RAW_ROTAS = [
+  {SITE:"MLB",COMPANY:"Transportadora Alpha",HUB:"SSP5",ANO_MES:"202601",QTD_ROTAS:120,CUSTO:58000,STOPS_PLAN:3600,STOPS_REAL:3420},
+  {SITE:"MLB",COMPANY:"Transportadora Alpha",HUB:"SSP5",ANO_MES:"202602",QTD_ROTAS:115,CUSTO:55200,STOPS_PLAN:3450,STOPS_REAL:3105},
+  {SITE:"MLB",COMPANY:"Transportadora Beta", HUB:"GRU1",ANO_MES:"202601",QTD_ROTAS:80, CUSTO:38400,STOPS_PLAN:2400,STOPS_REAL:2100},
+  {SITE:"MLB",COMPANY:"Transportadora Beta", HUB:"GRU1",ANO_MES:"202602",QTD_ROTAS:85, CUSTO:40800,STOPS_PLAN:2550,STOPS_REAL:2193},
+  {SITE:"MLB",COMPANY:"Transportadora Gama", HUB:"REC1",ANO_MES:"202601",QTD_ROTAS:60, CUSTO:27000,STOPS_PLAN:1800,STOPS_REAL:1530},
+  {SITE:"MLB",COMPANY:"Transportadora Gama", HUB:"REC1",ANO_MES:"202602",QTD_ROTAS:58, CUSTO:26100,STOPS_PLAN:1740,STOPS_REAL:1566},
+  {SITE:"MLA",COMPANY:"Transportadora Delta",HUB:"BUE1",ANO_MES:"202601",QTD_ROTAS:95, CUSTO:47500,STOPS_PLAN:2850,STOPS_REAL:2707},
+  {SITE:"MLA",COMPANY:"Transportadora Delta",HUB:"BUE1",ANO_MES:"202602",QTD_ROTAS:90, CUSTO:45000,STOPS_PLAN:2700,STOPS_REAL:2403},
+  {SITE:"MLM",COMPANY:"Transportadora Épsilon",HUB:"MEX1",ANO_MES:"202601",QTD_ROTAS:70,CUSTO:33600,STOPS_PLAN:2100,STOPS_REAL:1785},
+  {SITE:"MLM",COMPANY:"Transportadora Épsilon",HUB:"MEX1",ANO_MES:"202602",QTD_ROTAS:72,CUSTO:34560,STOPS_PLAN:2160,STOPS_REAL:1857},
+];
+
+const toMes = p => p.slice(0,6);
+const brl = v => "R$ "+(v||0).toLocaleString("pt-BR",{minimumFractionDigits:0,maximumFractionDigits:0});
+const pct = (a,b) => b ? ((a/b)*100).toFixed(1)+"%" : "-";
+
+const KPI = ({label,value,sub,color})=>(
+  <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:"14px 18px",flex:1,minWidth:130}}>
+    <div style={{color:C.muted,fontSize:11,marginBottom:4}}>{label}</div>
+    <div style={{color:color||C.white,fontSize:20,fontWeight:700}}>{value}</div>
+    {sub&&<div style={{color:C.muted,fontSize:11,marginTop:2}}>{sub}</div>}
+  </div>
+);
+
+const Tag = ({v})=>{
+  const c = v>=90?C.green:v>=70?C.yellow:C.red;
+  return <span style={{background:c+"22",color:c,borderRadius:4,padding:"2px 7px",fontSize:11,fontWeight:600}}>{v.toFixed(1)}%</span>;
+};
+
+const Sel = ({label,value,onChange,options})=>(
+  <div style={{display:"flex",flexDirection:"column",gap:4}}>
+    <label style={{color:C.muted,fontSize:11}}>{label}</label>
+    <select value={value} onChange={e=>onChange(e.target.value)}>
+      {options.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
+    </select>
+  </div>
+);
+
+const Slide = ({label,value,onChange,min,max,step=1})=>(
+  <div style={{display:"flex",flexDirection:"column",gap:4}}>
+    <label style={{color:C.muted,fontSize:11}}>{label} <span style={{color:C.accent,fontWeight:700}}>{value}%</span></label>
+    <input type="range" min={min} max={max} step={step} value={value} onChange={e=>onChange(+e.target.value)}/>
+    <div style={{display:"flex",justifyContent:"space-between",color:C.muted,fontSize:10}}><span>{min}%</span><span>{max}%</span></div>
+  </div>
+);
+
+// Mini bar chart using divs
+const BarChart = ({data,keys,colors,labelKey})=>{
+  const max = Math.max(...data.flatMap(d=>keys.map(k=>d[k]||0)))*1.1||1;
+  return(
+    <div style={{display:"flex",flexDirection:"column",gap:12}}>
+      {data.map((d,i)=>(
+        <div key={i}>
+          <div style={{color:C.white,fontSize:12,marginBottom:5}}>{d[labelKey]}</div>
+          {keys.map((k,ki)=>(
+            <div key={k} style={{display:"flex",alignItems:"center",gap:8,marginBottom:3}}>
+              <div style={{width:80,color:C.muted,fontSize:11,flexShrink:0}}>{k}</div>
+              <div style={{flex:1,background:C.border,borderRadius:4,height:14,overflow:"hidden"}}>
+                <div style={{width:((d[k]||0)/max*100)+"%",background:colors[ki],height:"100%",borderRadius:4,transition:"width .4s"}}/>
+              </div>
+              <div style={{width:110,color:colors[ki],fontSize:11,textAlign:"right"}}>{brl(d[k]||0)}</div>
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+};
+
+function App(){
+  const [fSite,setFSite]=useState("ALL");
+  const [fCo,setFCo]=useState("ALL");
+  const [fHub,setFHub]=useState("ALL");
+  const [fMes,setFMes]=useState("ALL");
+  const [thr,setThr]=useState(70);
+  const [pctC,setPctC]=useState(30);
+
+  const sites=["ALL",...new Set(RAW_ROTAS.map(r=>r.SITE))];
+  const cos=["ALL",...new Set(RAW_ROTAS.map(r=>r.COMPANY))];
+  const hubs=["ALL",...new Set(RAW_ROTAS.map(r=>r.HUB))];
+  const meses=["ALL",...new Set(RAW_ROTAS.map(r=>r.ANO_MES))].sort();
+
+  const descMap=useMemo(()=>{
+    const m={};
+    RAW_DESCONTO.forEach(d=>{
+      const k=[d.SITE,d.COMPANY,d.FACILITY,toMes(d.PERIODO)].join("|");
+      m[k]=(m[k]||0)+d.DESCONTO;
+    });
+    return m;
+  },[]);
+
+  const joined=useMemo(()=>{
+    return RAW_ROTAS.map(r=>{
+      const k=[r.SITE,r.COMPANY,r.HUB,r.ANO_MES].join("|");
+      const desc=descMap[k]||0;
+      const pv=r.STOPS_PLAN>0?(r.STOPS_REAL/r.STOPS_PLAN)*100:0;
+      const ok=pv>=90;
+      const faixa=!ok&&pv>=thr;
+      const sim=faixa?r.CUSTO*(pctC/100):(ok?r.CUSTO:0);
+      return{...r,DESCONTO:desc,PCT:pv,OK:ok,FAIXA:faixa,SIM:sim};
+    }).filter(r=>
+      (fSite==="ALL"||r.SITE===fSite)&&
+      (fCo==="ALL"||r.COMPANY===fCo)&&
+      (fHub==="ALL"||r.HUB===fHub)&&
+      (fMes==="ALL"||r.ANO_MES===fMes)
+    );
+  },[descMap,fSite,fCo,fHub,fMes,thr,pctC]);
+
+  const tot=joined.reduce((s,r)=>s+r.QTD_ROTAS,0);
+  const totC=joined.reduce((s,r)=>s+r.CUSTO,0);
+  const totD=joined.reduce((s,r)=>s+r.DESCONTO,0);
+  const totS=joined.reduce((s,r)=>s+r.SIM,0);
+  const rotOk=joined.filter(r=>r.OK).reduce((s,r)=>s+r.QTD_ROTAS,0);
+  const rotF=joined.filter(r=>r.FAIXA).reduce((s,r)=>s+r.QTD_ROTAS,0);
+  const cusOk=joined.filter(r=>r.OK).reduce((s,r)=>s+r.CUSTO,0);
+  const cusF=joined.filter(r=>r.FAIXA).reduce((s,r)=>s+r.CUSTO,0);
+
+  const byMes=useMemo(()=>{
+    const m={};
+    joined.forEach(r=>{
+      if(!m[r.ANO_MES])m[r.ANO_MES]={MES:r.ANO_MES,CUSTO:0,DESCONTO:0,SIM:0,OK:0};
+      m[r.ANO_MES].CUSTO+=r.CUSTO;
+      m[r.ANO_MES].DESCONTO+=r.DESCONTO;
+      m[r.ANO_MES].SIM+=r.SIM;
+      if(r.OK)m[r.ANO_MES].OK+=r.CUSTO;
+    });
+    return Object.values(m).sort((a,b)=>a.MES.localeCompare(b.MES));
+  },[joined]);
+
+  const byMLP=useMemo(()=>{
+    const m={};
+    joined.forEach(r=>{
+      if(!m[r.SITE])m[r.SITE]={SITE:r.SITE,CUSTO:0,DESCONTO:0,SIM:0,ROTAS_OK:0,ROTAS_F:0};
+      m[r.SITE].CUSTO+=r.CUSTO;
+      m[r.SITE].DESCONTO+=r.DESCONTO;
+      m[r.SITE].SIM+=r.SIM;
+      if(r.OK)m[r.SITE].ROTAS_OK+=r.QTD_ROTAS;
+      if(r.FAIXA)m[r.SITE].ROTAS_F+=r.QTD_ROTAS;
+    });
+    return Object.values(m);
+  },[joined]);
+
+  const card={background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:16};
+  const sec={marginBottom:24};
+  const secT={color:C.accent,fontSize:13,fontWeight:700,textTransform:"uppercase",letterSpacing:1,marginBottom:12};
+
+  return(
+    <div style={{background:C.bg,minHeight:"100vh",padding:"20px 24px",fontFamily:"system-ui,sans-serif",color:C.white}}>
+      <div style={{marginBottom:20}}>
+        <div style={{fontSize:20,fontWeight:800}}>📦 SLA Last Mile — Simulador de Cenários</div>
+        <div style={{color:C.muted,fontSize:12,marginTop:2}}>Análise de impacto de mudança de regra de pagamento de rotas</div>
+        <div style={{marginTop:6,background:"#fbbf2422",border:"1px solid #fbbf2444",borderRadius:6,padding:"6px 12px",fontSize:11,color:C.yellow,display:"inline-block"}}>
+          ⚠️ Dados mockados — substitua pelos dados reais do BigQuery
+        </div>
+      </div>
+
+      {/* FILTROS */}
+      <div style={{...card,marginBottom:20}}>
+        <div style={secT}>🔽 Filtros</div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(160px,1fr))",gap:14}}>
+          <Sel label="País (Site)" value={fSite} onChange={setFSite} options={sites.map(v=>({value:v,label:v==="ALL"?"Todos":v}))}/>
+          <Sel label="Transportador" value={fCo} onChange={setFCo} options={cos.map(v=>({value:v,label:v==="ALL"?"Todos":v}))}/>
+          <Sel label="Facility (HUB)" value={fHub} onChange={setFHub} options={hubs.map(v=>({value:v,label:v==="ALL"?"Todos":v}))}/>
+          <Sel label="Mês" value={fMes} onChange={setFMes} options={meses.map(v=>({value:v,label:v==="ALL"?"Todos":v}))}/>
+        </div>
+      </div>
+
+      {/* PARÂMETROS */}
+      <div style={{...card,marginBottom:20,borderColor:C.accent+"55"}}>
+        <div style={secT}>⚙️ Parâmetros do Cenário</div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:24}}>
+          <Slide label="Threshold mínimo para pagamento parcial" value={thr} onChange={setThr} min={0} max={89}/>
+          <Slide label="% do CUSTO a pagar na faixa simulada" value={pctC} onChange={setPctC} min={5} max={100} step={5}/>
+        </div>
+        <div style={{marginTop:12,background:C.bg,borderRadius:6,padding:"8px 12px",fontSize:12,color:C.muted}}>
+          📌 Rotas com <span style={{color:C.yellow,fontWeight:700}}>{thr}% ≤ visitas &lt; 90%</span> recebem <span style={{color:C.yellow,fontWeight:700}}>{pctC}% do CUSTO</span> da rota.
+        </div>
+      </div>
+
+      {/* KPIs */}
+      <div style={sec}>
+        <div style={secT}>📊 Visão Geral</div>
+        <div style={{display:"flex",gap:12,flexWrap:"wrap"}}>
+          <KPI label="Total Rotas" value={tot.toLocaleString("pt-BR")}/>
+          <KPI label="Rotas ≥90% (SLA OK)" value={rotOk.toLocaleString("pt-BR")} color={C.green} sub={pct(rotOk,tot)+" do total"}/>
+          <KPI label={`Faixa ≥${thr}% e <90%`} value={rotF.toLocaleString("pt-BR")} color={C.yellow} sub={pct(rotF,tot)+" do total"}/>
+          <KPI label="Faturado (CUSTO)" value={brl(totC)} color={C.accent}/>
+          <KPI label="Desconto Real" value={brl(totD)} color={C.red}/>
+          <KPI label={`Custo Estimado (${pctC}%)`} value={brl(totS)} color={C.purple} sub="faixa simulada"/>
+        </div>
+      </div>
+
+      {/* COMPARATIVO TOTAL */}
+      <div style={sec}>
+        <div style={secT}>⚖️ Atual vs Cenário Simulado</div>
+        <div style={{display:"flex",gap:12,flexWrap:"wrap"}}>
+          <div style={{...card,flex:1,minWidth:240}}>
+            <div style={{fontSize:12,color:C.muted,marginBottom:10}}>Rotas Pagas</div>
+            <div style={{display:"flex",gap:16,alignItems:"center"}}>
+              <div><div style={{fontSize:10,color:C.muted}}>Atual (≥90%)</div><div style={{color:C.green,fontSize:22,fontWeight:700}}>{rotOk.toLocaleString("pt-BR")}</div></div>
+              <div style={{color:C.border,fontSize:24}}>→</div>
+              <div><div style={{fontSize:10,color:C.muted}}>Simulado (≥{thr}%)</div><div style={{color:C.yellow,fontSize:22,fontWeight:700}}>{(rotOk+rotF).toLocaleString("pt-BR")}</div></div>
+              <div style={{background:C.yellow+"22",color:C.yellow,borderRadius:6,padding:"3px 8px",fontSize:11}}>+{rotF.toLocaleString("pt-BR")}</div>
+            </div>
+          </div>
+          <div style={{...card,flex:1,minWidth:280}}>
+            <div style={{fontSize:12,color:C.muted,marginBottom:10}}>Custo Pago / Estimado</div>
+            <div style={{display:"flex",gap:16,alignItems:"center"}}>
+              <div><div style={{fontSize:10,color:C.muted}}>Atual</div><div style={{color:C.green,fontSize:18,fontWeight:700}}>{brl(cusOk)}</div></div>
+              <div style={{color:C.border,fontSize:24}}>→</div>
+              <div><div style={{fontSize:10,color:C.muted}}>Simulado</div><div style={{color:C.yellow,fontSize:18,fontWeight:700}}>{brl(cusOk+totS)}</div></div>
+            </div>
+            <div style={{marginTop:8,color:C.purple,fontSize:12}}>Incremento: {brl(totS)} ({pctC}% de {brl(cusF)})</div>
+          </div>
+          <div style={{...card,flex:1,minWidth:200}}>
+            <div style={{fontSize:12,color:C.muted,marginBottom:10}}>Desconto Real vs Custo Cenário</div>
+            <div style={{display:"flex",gap:24}}>
+              <div><div style={{fontSize:10,color:C.muted}}>Desconto Real</div><div style={{color:C.red,fontWeight:700,fontSize:16}}>{brl(totD)}</div></div>
+              <div><div style={{fontSize:10,color:C.muted}}>Custo Cenário</div><div style={{color:C.purple,fontWeight:700,fontSize:16}}>{brl(totS)}</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* POR MÊS */}
+      <div style={sec}>
+        <div style={secT}>📅 Gasto por Mês</div>
+        <div style={{...card,overflowX:"auto"}}>
+          <table>
+            <thead><tr>
+              {["Mês","Faturado","Desconto Real","Custo Atual (≥90%)","Custo Cenário","Δ Incremento"].map(h=><th key={h}>{h}</th>)}
+            </tr></thead>
+            <tbody>
+              {byMes.map(m=>(
+                <tr key={m.MES}>
+                  <td style={{fontWeight:700}}>{m.MES}</td>
+                  <td style={{color:C.accent}}>{brl(m.CUSTO)}</td>
+                  <td style={{color:C.red}}>{brl(m.DESCONTO)}</td>
+                  <td style={{color:C.green}}>{brl(m.OK)}</td>
+                  <td style={{color:C.yellow}}>{brl(m.OK+m.SIM)}</td>
+                  <td style={{color:C.purple}}>+{brl(m.SIM)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* POR MLP */}
+      <div style={sec}>
+        <div style={secT}>🌎 Comparativo por MLP</div>
+        <div style={{...card}}>
+          <BarChart
+            data={byMLP}
+            labelKey="SITE"
+            keys={["Faturado","Desconto Real","Custo Simulado"]}
+            colors={[C.accent,C.red,C.purple]}
+          />
+        </div>
+      </div>
+
+      {/* DETALHE */}
+      <div style={sec}>
+        <div style={secT}>📋 Detalhe por Linha</div>
+        <div style={{...card,overflowX:"auto"}}>
+          <table>
+            <thead><tr>
+              {["Site","Transportador","HUB","Mês","Rotas","Stops Plan","Stops Real","% Visita","Faturado","Desconto","Status","Custo Cenário"].map(h=><th key={h}>{h}</th>)}
+            </tr></thead>
+            <tbody>
+              {joined.map((r,i)=>(
+                <tr key={i}>
+                  <td>{r.SITE}</td>
+                  <td>{r.COMPANY}</td>
+                  <td>{r.HUB}</td>
+                  <td>{r.ANO_MES}</td>
+                  <td>{r.QTD_ROTAS}</td>
+                  <td>{r.STOPS_PLAN.toLocaleString("pt-BR")}</td>
+                  <td>{r.STOPS_REAL.toLocaleString("pt-BR")}</td>
+                  <td><Tag v={r.PCT}/></td>
+                  <td style={{color:C.accent}}>{brl(r.CUSTO)}</td>
+                  <td style={{color:C.red}}>{brl(r.DESCONTO)}</td>
+                  <td>{r.OK?<span style={{color:C.green,fontSize:11}}>✅ Pago</span>:r.FAIXA?<span style={{color:C.yellow,fontSize:11}}>⚡ Faixa</span>:<span style={{color:C.red,fontSize:11}}>❌ Não pago</span>}</td>
+                  <td style={{color:C.purple}}>{r.FAIXA?brl(r.SIM):"-"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div style={{color:C.muted,fontSize:11,textAlign:"center",paddingTop:12,paddingBottom:20}}>
+        ⚠️ Dados mockados para validação. Substitua pelos dados reais do BigQuery.
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
