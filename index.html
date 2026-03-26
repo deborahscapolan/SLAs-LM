@@ -29,16 +29,26 @@ const C = {bg:"#0f172a",card:"#1e293b",border:"#334155",accent:"#38bdf8",green:"
 
 // ── CONFIG ─────────────────────────────────────────────────────
 const SHEET_ID = "1uUEQbeKq5z2aJjO85b-k2HHz_a3QiFTH8LWTcg6BWq4";
-const sheetUrl = (aba) =>
-  `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(aba)}`;
 
-// Converte resposta gviz para array de objetos
-function parseGviz(raw) {
-  const json = JSON.parse(raw.replace(/^[^{]+/, "").replace(/[^}]+$/, ""));
-  const cols = json.table.cols.map(c => c.label);
-  return json.table.rows.map(r => {
+// Usa exportação CSV pública — sem bloqueio CORS
+const sheetUrl = (gid) =>
+  `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${gid}`;
+
+// GIDs das abas (veja na URL ao clicar na aba na planilha)
+const GID_DESCONTOS = "0";           // 🔧 substitua pelo gid da aba "descontos"
+const GID_ROTAS     = "293029595";   // 🔧 substitua pelo gid da aba "rotas"
+
+// Parse CSV simples
+function parseCSV(text) {
+  const lines = text.trim().split("\n");
+  const headers = lines[0].split(",").map(h => h.trim().replace(/^"|"$/g, ""));
+  return lines.slice(1).map(line => {
+    const vals = line.match(/(".*?"|[^,]+|(?<=,)(?=,)|^(?=,)|(?<=,)$)/g) || [];
     const obj = {};
-    r.c.forEach((cell, i) => { obj[cols[i]] = cell ? cell.v : null; });
+    headers.forEach((h, i) => {
+      const v = (vals[i] || "").replace(/^"|"$/g, "").trim();
+      obj[h] = isNaN(v) || v === "" ? v : +v;
+    });
     return obj;
   });
 }
@@ -100,7 +110,10 @@ function App(){
         .then(r => r.text())
         .then(parseGviz);
 
-    Promise.all([fetchSheet("descontos"), fetchSheet("rotas")])
+    Promise.all([
+      fetch(sheetUrl(GID_DESCONTOS)).then(r=>r.text()).then(parseCSV),
+      fetch(sheetUrl(GID_ROTAS)).then(r=>r.text()).then(parseCSV)
+    ])
       .then(([desc, rotas]) => {
         setRawDesc(desc);
         setRawRotas(rotas);
